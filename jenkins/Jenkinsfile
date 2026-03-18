@@ -7,7 +7,7 @@ pipeline {
         ECR_BACKEND    = '176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-app-backend'
         ECR_NGINX      = '176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-app-nginx'
         IMAGE_TAG      = "${BUILD_NUMBER}"
-        APP_DIR        = '/home/ec2-user/COMPLETE_INFRA'
+        APP_DIR        = '/opt/app/COMPLETE_INFRA'
         GITHUB_URL     = 'https://github.com/satyamsingh24/COMPLETE_INFRA.git'
     }
 
@@ -55,18 +55,23 @@ pipeline {
             }
         }
 
-        stage('Clone or Update on EC2') {
+        stage('Clone or Update') {
             steps {
-                echo '📥 Clone/Update project on EC2...'
+                echo '📥 Clone/Update project...'
                 sh """
-                    if [ ! -d "${APP_DIR}/.git" ]; then
-                        echo "Cloning fresh..."
-                        rm -rf ${APP_DIR}
-                        git clone ${GITHUB_URL} ${APP_DIR}
-                    else
+                    # Jenkins ke liye /opt/app use karo
+                    sudo mkdir -p /opt/app
+                    sudo chown -R jenkins:jenkins /opt/app
+
+                    if [ -d "${APP_DIR}/.git" ]; then
                         echo "Pulling latest..."
                         cd ${APP_DIR} && git pull origin main
+                    else
+                        echo "Cloning fresh..."
+                        git clone ${GITHUB_URL} ${APP_DIR}
                     fi
+
+                    echo "✅ Code ready:"
                     ls ${APP_DIR}
                 """
             }
@@ -91,11 +96,15 @@ pipeline {
                 echo '🚀 Deploying with docker-compose...'
                 sh """
                     cd ${APP_DIR}
+
                     aws ecr get-login-password --region ${AWS_REGION} | \
                     docker login --username AWS --password-stdin \
                     ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+
                     docker-compose down --remove-orphans || true
                     docker-compose up -d --build
+
+                    echo "✅ Running containers:"
                     docker-compose ps
                 """
             }
@@ -106,8 +115,8 @@ pipeline {
                 echo '✅ Health Check...'
                 sh """
                     sleep 60
-                    curl -f http://localhost:8086/actuator/health && echo "Backend OK" || echo "Backend not ready"
-                    curl -f http://localhost:80 && echo "Nginx OK" || echo "Nginx not ready"
+                    curl -f http://localhost:8086/actuator/health && echo "✅ Backend OK" || echo "⚠️ Backend not ready"
+                    curl -f http://localhost:80 && echo "✅ Nginx OK" || echo "⚠️ Nginx not ready"
                 """
             }
         }
@@ -115,10 +124,10 @@ pipeline {
 
     post {
         success {
-            echo '🎉 Pipeline SUCCESS!'
+            echo '🎉 Pipeline SUCCESS! App deployed!'
         }
         failure {
-            echo '❌ Pipeline FAILED!'
+            echo '❌ Pipeline FAILED! Check logs.'
         }
     }
 }
