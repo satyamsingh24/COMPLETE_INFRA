@@ -36,6 +36,14 @@ resource "aws_security_group" "jenkins_ec2" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  ingress {
+    description = "Backend Port"
+    from_port   = 8085
+    to_port     = 8086
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -48,7 +56,7 @@ resource "aws_security_group" "jenkins_ec2" {
   }
 }
 
-# IAM Role for EC2
+# IAM Role
 resource "aws_iam_role" "ec2_role" {
   name = "${var.project_name}-ec2-role"
 
@@ -88,7 +96,6 @@ resource "aws_iam_instance_profile" "ec2_profile" {
   role = aws_iam_role.ec2_role.name
 }
 
-# Userdata Script - Fixed Version
 locals {
   userdata = <<-USERDATA
     #!/bin/bash
@@ -102,33 +109,46 @@ locals {
     # System update
     dnf update -y
 
-    # Install basic tools (curl, unzip, git)
+    # Basic tools
     dnf install -y git curl unzip
-
     echo "✅ Git: $(git --version)"
 
-    # Install Java 17 headless
+    # Java 17
     dnf install -y java-17-amazon-corretto-headless
     echo "✅ Java: $(java -version 2>&1 | head -1)"
 
-    # Install Docker
+    # Docker
     dnf install -y docker
     systemctl enable docker
     systemctl start docker
     usermod -aG docker ec2-user
     echo "✅ Docker: $(docker --version)"
 
-    # Install Jenkins via curl
+    # docker-compose
+    curl -L https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64 \
+      -o /usr/local/bin/docker-compose
+    chmod +x /usr/local/bin/docker-compose
+    echo "✅ docker-compose: $(docker-compose --version)"
+
+    # Jenkins
     curl -o /etc/yum.repos.d/jenkins.repo \
       https://pkg.jenkins.io/redhat-stable/jenkins.repo
     rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
     dnf install -y jenkins --nogpgcheck
-    
-    # Add jenkins to docker group
+
+    # Jenkins sudoers - NO PASSWORD REQUIRED
+    echo "jenkins ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/jenkins
+    chmod 440 /etc/sudoers.d/jenkins
+
+    # Jenkins docker group
     usermod -aG docker jenkins
 
-    # Fix Jenkins config before first start
-    # Set slaveAgentPort to 50000 (not -1)
+    # /opt/app directory for deployments
+    mkdir -p /opt/app
+    chown -R jenkins:jenkins /opt/app
+    chmod -R 755 /opt/app
+
+    # Jenkins config - fix slaveAgentPort and executors
     mkdir -p /var/lib/jenkins
     cat > /var/lib/jenkins/config.xml << 'JENKINSCONF'
 <?xml version='1.1' encoding='UTF-8'?>
@@ -137,7 +157,6 @@ locals {
     <string>jenkins.diagnostics.ControllerExecutorsNoAgents</string>
     <string>hudson.node_monitors.MonitorMarkedNodeOffline</string>
   </disabledAdministrativeMonitors>
-  <version>2.541.2</version>
   <numExecutors>2</numExecutors>
   <mode>NORMAL</mode>
   <useSecurity>true</useSecurity>
@@ -182,14 +201,13 @@ JENKINSCONF
     systemctl start jenkins
     echo "✅ Jenkins started"
 
-    # Install AWS CLI v2
-    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" \
-      -o "/tmp/awscliv2.zip"
+    # AWS CLI v2
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
     unzip -q /tmp/awscliv2.zip -d /tmp
     /tmp/aws/install
     echo "✅ AWS CLI: $(aws --version)"
 
-    # Install Terraform via binary (repo method fails on AL2023)
+    # Terraform binary
     curl -Lo /tmp/terraform.zip \
       https://releases.hashicorp.com/terraform/1.7.5/terraform_1.7.5_linux_amd64.zip
     unzip -q /tmp/terraform.zip -d /tmp
@@ -197,24 +215,20 @@ JENKINSCONF
     chmod +x /usr/local/bin/terraform
     echo "✅ Terraform: $(terraform version | head -1)"
 
-    # Clone Project
-    cd /home/ec2-user
-    git clone ${var.github_repo_url} COMPLETE_INFRA \
-      || echo "⚠️ Clone failed - check repo URL"
-    chown -R ec2-user:ec2-user /home/ec2-user/COMPLETE_INFRA || true
+    # Clone project
+    git clone ${var.github_repo_url} /opt/app/COMPLETE_INFRA || true
+    chown -R jenkins:jenkins /opt/app/COMPLETE_INFRA || true
 
-    # Expand /tmp (fix for Jenkins offline issue)
+    # Expand /tmp
     mount -o remount,size=2G /tmp || true
 
     echo "==============================="
     echo " Bootstrap Complete!"
     echo "==============================="
-    echo "Jenkins Password: $(cat /var/lib/jenkins/secrets/initialAdminPassword \
-      2>/dev/null || echo 'not ready yet - check again in 2 min')"
+    echo "Jenkins Password: $(cat /var/lib/jenkins/secrets/initialAdminPassword 2>/dev/null || echo 'wait 2 min')"
   USERDATA
 }
 
-# EC2 Instance
 resource "aws_instance" "jenkins" {
   ami                    = data.aws_ami.amazon_linux.id
   instance_type          = var.instance_type
