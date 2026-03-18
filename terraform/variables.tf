@@ -51,3 +51,8 @@ variable "github_repo_url" {
   type        = string
   default     = "https://github.com/satyamsingh24/COMPLETE_INFRA.git"
 }
+variable "alert_email" {
+  description = "Email for CloudWatch alerts"
+  type        = string
+  default     = "your-email@gmail.com"
+}
