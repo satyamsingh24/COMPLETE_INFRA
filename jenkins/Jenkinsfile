@@ -2,68 +2,99 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION        = 'ap-south-1'
-        AWS_ACCOUNT_ID    = '176583374037'
-        ECR_REPO          = 'complete-infra-app'
-        ECR_URI           = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}"
-        IMAGE_TAG         = "${BUILD_NUMBER}"
+        AWS_REGION     = 'ap-south-1'
+        AWS_ACCOUNT_ID = '176583374037'
+        ECR_BACKEND    = '176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-app-backend'
+        ECR_NGINX      = '176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-app-nginx'
+        IMAGE_TAG      = "${BUILD_NUMBER}"
+        APP_DIR        = '/home/ec2-user/COMPLETE_INFRA'
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                echo '📥 Cloning repository...'
+                echo '📥 Code checkout...'
                 checkout scm
             }
         }
 
-        stage('Build Docker Image') {
+        stage('ECR Login') {
             steps {
-                echo '🐳 Building Docker image...'
-                sh """
-                    docker build -t ${ECR_REPO}:${IMAGE_TAG} ./app
-                    docker tag ${ECR_REPO}:${IMAGE_TAG} ${ECR_URI}:${IMAGE_TAG}
-                    docker tag ${ECR_REPO}:${IMAGE_TAG} ${ECR_URI}:latest
-                """
-            }
-        }
-
-        stage('Push to ECR') {
-            steps {
-                echo '📤 Pushing image to ECR...'
+                echo '🔐 ECR Login...'
                 sh """
                     aws ecr get-login-password --region ${AWS_REGION} | \
-                    docker login --username AWS --password-stdin ${ECR_URI}
-                    
-                    docker push ${ECR_URI}:${IMAGE_TAG}
-                    docker push ${ECR_URI}:latest
+                    docker login --username AWS --password-stdin \
+                    ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
                 """
             }
         }
 
-        stage('Deploy to ECS') {
+        stage('Build & Push Backend') {
             steps {
-                echo '🚀 Deploying to ECS...'
+                echo '🐳 Building Backend...'
                 sh """
-                    aws ecs update-service \
-                        --cluster complete-infra-cluster \
-                        --service complete-infra-service \
-                        --force-new-deployment \
-                        --region ${AWS_REGION}
+                    docker build -t ${ECR_BACKEND}:${IMAGE_TAG} ./backend
+                    docker tag ${ECR_BACKEND}:${IMAGE_TAG} ${ECR_BACKEND}:latest
+                    docker push ${ECR_BACKEND}:${IMAGE_TAG}
+                    docker push ${ECR_BACKEND}:latest
                 """
             }
         }
 
-        stage('Verify Deployment') {
+        stage('Build & Push Nginx') {
             steps {
-                echo '✅ Verifying deployment...'
+                echo '🌐 Building Nginx...'
                 sh """
-                    aws ecs describe-services \
-                        --cluster complete-infra-cluster \
-                        --services complete-infra-service \
-                        --region ${AWS_REGION} \
-                        --query 'services[0].deployments'
+                    docker build -t ${ECR_NGINX}:${IMAGE_TAG} ./nginx
+                    docker tag ${ECR_NGINX}:${IMAGE_TAG} ${ECR_NGINX}:latest
+                    docker push ${ECR_NGINX}:${IMAGE_TAG}
+                    docker push ${ECR_NGINX}:latest
+                """
+            }
+        }
+
+        stage('Setup EC2 & Deploy') {
+            steps {
+                echo '🚀 Deploying on EC2...'
+                sh """
+                    # docker-compose install karo agar nahi hai
+                    which docker-compose || (
+                        sudo curl -L https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64 \
+                            -o /usr/local/bin/docker-compose && \
+                        sudo chmod +x /usr/local/bin/docker-compose
+                    )
+
+                    # Project clone ya update karo
+                    if [ -d "${APP_DIR}" ]; then
+                        cd ${APP_DIR} && git pull origin main
+                    else
+                        git clone https://github.com/satyamsingh24/COMPLETE_INFRA.git ${APP_DIR}
+                    fi
+
+                    # ECR login
+                    aws ecr get-login-password --region ${AWS_REGION} | \
+                    docker login --username AWS --password-stdin \
+                    ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+
+                    # Deploy
+                    cd ${APP_DIR}
+                    docker-compose down || true
+                    docker-compose up -d --build
+
+                    echo '✅ Deployed!'
+                """
+            }
+        }
+
+        stage('Health Check') {
+            steps {
+                echo '✅ Health Check...'
+                sh """
+                    sleep 45
+                    curl -f http://localhost:8086/actuator/health || \
+                    curl -f http://localhost:80 || \
+                    echo '⚠️ Check manually'
                 """
             }
         }
@@ -71,10 +102,10 @@ pipeline {
 
     post {
         success {
-            echo '🎉 Pipeline SUCCESS! App deployed to ECS.'
+            echo '🎉 Pipeline SUCCESS!'
         }
         failure {
-            echo '❌ Pipeline FAILED! Check logs.'
+            echo '❌ Pipeline FAILED!'
         }
     }
 }
