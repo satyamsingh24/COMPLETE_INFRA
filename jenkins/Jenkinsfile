@@ -4,11 +4,11 @@ pipeline {
     environment {
         AWS_REGION     = 'ap-south-1'
         AWS_ACCOUNT_ID = '176583374037'
-        ECR_REPO       = 'complete-infra-app'
-        ECR_URI        = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}"
+        ECR_BACKEND    = '176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-app-backend'
+        ECR_NGINX      = '176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-app-nginx'
         IMAGE_TAG      = "${BUILD_NUMBER}"
         APP_DIR        = '/home/ec2-user/COMPLETE_INFRA'
-        EC2_IP         = '15.206.160.161'
+        GITHUB_URL     = 'https://github.com/satyamsingh24/COMPLETE_INFRA.git'
     }
 
     stages {
@@ -31,59 +31,72 @@ pipeline {
             }
         }
 
-        stage('Build Backend Image') {
+        stage('Build and Push Backend') {
             steps {
-                echo '🐳 Building Backend Docker image...'
+                echo '🐳 Building Backend...'
                 sh """
-                    docker build -t ${ECR_REPO}-backend:${IMAGE_TAG} ./backend
-                    docker tag ${ECR_REPO}-backend:${IMAGE_TAG} ${ECR_URI}-backend:${IMAGE_TAG}
-                    docker tag ${ECR_REPO}-backend:${IMAGE_TAG} ${ECR_URI}-backend:latest
+                    docker build -t ${ECR_BACKEND}:${IMAGE_TAG} ./backend
+                    docker tag ${ECR_BACKEND}:${IMAGE_TAG} ${ECR_BACKEND}:latest
+                    docker push ${ECR_BACKEND}:${IMAGE_TAG}
+                    docker push ${ECR_BACKEND}:latest
                 """
             }
         }
 
-        stage('Build Nginx Image') {
+        stage('Build and Push Nginx') {
             steps {
-                echo '🌐 Building Nginx Docker image...'
+                echo '🌐 Building Nginx...'
                 sh """
-                    docker build -t ${ECR_REPO}-nginx:${IMAGE_TAG} ./nginx
-                    docker tag ${ECR_REPO}-nginx:${IMAGE_TAG} ${ECR_URI}-nginx:${IMAGE_TAG}
-                    docker tag ${ECR_REPO}-nginx:${IMAGE_TAG} ${ECR_URI}-nginx:latest
+                    docker build -t ${ECR_NGINX}:${IMAGE_TAG} ./nginx
+                    docker tag ${ECR_NGINX}:${IMAGE_TAG} ${ECR_NGINX}:latest
+                    docker push ${ECR_NGINX}:${IMAGE_TAG}
+                    docker push ${ECR_NGINX}:latest
                 """
             }
         }
 
-        stage('Push to ECR') {
+        stage('Clone or Update on EC2') {
             steps {
-                echo '📤 Pushing images to ECR...'
+                echo '📥 Clone/Update project on EC2...'
                 sh """
-                    docker push ${ECR_URI}-backend:${IMAGE_TAG}
-                    docker push ${ECR_URI}-backend:latest
-                    docker push ${ECR_URI}-nginx:${IMAGE_TAG}
-                    docker push ${ECR_URI}-nginx:latest
+                    if [ ! -d "${APP_DIR}/.git" ]; then
+                        echo "Cloning fresh..."
+                        rm -rf ${APP_DIR}
+                        git clone ${GITHUB_URL} ${APP_DIR}
+                    else
+                        echo "Pulling latest..."
+                        cd ${APP_DIR} && git pull origin main
+                    fi
+                    ls ${APP_DIR}
                 """
             }
         }
 
-        stage('Deploy on EC2') {
+        stage('Install docker-compose') {
             steps {
-                echo '🚀 Deploying with docker-compose on EC2...'
+                echo '⚙️ Checking docker-compose...'
                 sh """
-                    # Code update karo
+                    if ! command -v docker-compose > /dev/null 2>&1; then
+                        sudo curl -L https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64 \
+                            -o /usr/local/bin/docker-compose
+                        sudo chmod +x /usr/local/bin/docker-compose
+                    fi
+                    docker-compose --version
+                """
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                echo '🚀 Deploying with docker-compose...'
+                sh """
                     cd ${APP_DIR}
-                    git pull origin main
-
-                    # ECR login on EC2
                     aws ecr get-login-password --region ${AWS_REGION} | \
                     docker login --username AWS --password-stdin \
                     ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
-
-                    # Docker compose up
-                    docker-compose down || true
-                    docker-compose pull || true
+                    docker-compose down --remove-orphans || true
                     docker-compose up -d --build
-
-                    echo '✅ App deployed!'
+                    docker-compose ps
                 """
             }
         }
@@ -92,10 +105,9 @@ pipeline {
             steps {
                 echo '✅ Health Check...'
                 sh """
-                    sleep 30
-                    curl -f http://${EC2_IP}/actuator/health || \
-                    curl -f http://${EC2_IP} || \
-                    echo '⚠️ Health check failed - check manually'
+                    sleep 60
+                    curl -f http://localhost:8086/actuator/health && echo "Backend OK" || echo "Backend not ready"
+                    curl -f http://localhost:80 && echo "Nginx OK" || echo "Nginx not ready"
                 """
             }
         }
@@ -103,10 +115,10 @@ pipeline {
 
     post {
         success {
-            echo '🎉 Pipeline SUCCESS! App deployed!'
+            echo '🎉 Pipeline SUCCESS!'
         }
         failure {
-            echo '❌ Pipeline FAILED! Check logs.'
+            echo '❌ Pipeline FAILED!'
         }
     }
 }
