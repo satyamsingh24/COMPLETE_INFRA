@@ -12,3 +12,7 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+backend/target/
+*.class
+*.jar
+*.jar.original
