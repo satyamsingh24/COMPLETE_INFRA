@@ -1,0 +1,80 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION        = 'ap-south-1'
+        AWS_ACCOUNT_ID    = '176583374037'
+        ECR_REPO          = 'complete-infra-app'
+        ECR_URI           = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}"
+        IMAGE_TAG         = "${BUILD_NUMBER}"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                echo '📥 Cloning repository...'
+                checkout scm
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                echo '🐳 Building Docker image...'
+                sh """
+                    docker build -t ${ECR_REPO}:${IMAGE_TAG} ./app
+                    docker tag ${ECR_REPO}:${IMAGE_TAG} ${ECR_URI}:${IMAGE_TAG}
+                    docker tag ${ECR_REPO}:${IMAGE_TAG} ${ECR_URI}:latest
+                """
+            }
+        }
+
+        stage('Push to ECR') {
+            steps {
+                echo '📤 Pushing image to ECR...'
+                sh """
+                    aws ecr get-login-password --region ${AWS_REGION} | \
+                    docker login --username AWS --password-stdin ${ECR_URI}
+                    
+                    docker push ${ECR_URI}:${IMAGE_TAG}
+                    docker push ${ECR_URI}:latest
+                """
+            }
+        }
+
+        stage('Deploy to ECS') {
+            steps {
+                echo '🚀 Deploying to ECS...'
+                sh """
+                    aws ecs update-service \
+                        --cluster complete-infra-cluster \
+                        --service complete-infra-service \
+                        --force-new-deployment \
+                        --region ${AWS_REGION}
+                """
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                echo '✅ Verifying deployment...'
+                sh """
+                    aws ecs describe-services \
+                        --cluster complete-infra-cluster \
+                        --services complete-infra-service \
+                        --region ${AWS_REGION} \
+                        --query 'services[0].deployments'
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '🎉 Pipeline SUCCESS! App deployed to ECS.'
+        }
+        failure {
+            echo '❌ Pipeline FAILED! Check logs.'
+        }
+    }
+}
