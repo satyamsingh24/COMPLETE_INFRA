@@ -19,23 +19,24 @@ resource "aws_cloudwatch_log_group" "ecs" {
   retention_in_days = 7
 }
 
-# ECS Task Definition - sab containers ek saath
+# ECS Task Definition - sirf 3 containers
 resource "aws_ecs_task_definition" "app" {
   family                   = "${var.project_name}-task"
   network_mode             = "awsvpc"
   requires_compatibilities = ["EC2"]
-  cpu                      = "2048"
-  memory                   = "3072"
+  cpu                      = "1024"
+  memory                   = "2048"
   execution_role_arn       = aws_iam_role.ecs_execution_role.arn
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
   container_definitions = jsonencode([
+
     # MySQL Container
     {
       name      = "mysql"
       image     = "mysql:8.0"
-      essential = false
-      
+      essential = true
+
       environment = [
         { name = "MYSQL_ROOT_PASSWORD", value = "root" },
         { name = "MYSQL_DATABASE",      value = "mydb" }
@@ -65,30 +66,6 @@ resource "aws_ecs_task_definition" "app" {
       }
     },
 
-    # Redis Container
-    {
-      name      = "redis"
-      image     = "redis:alpine"
-      essential = false
-
-      healthCheck = {
-        command     = ["CMD", "redis-cli", "ping"]
-        interval    = 10
-        timeout     = 5
-        retries     = 3
-        startPeriod = 10
-      }
-
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = "/ecs/${var.project_name}"
-          "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "redis"
-        }
-      }
-    },
-
     # Backend Container
     {
       name      = "backend"
@@ -109,8 +86,7 @@ resource "aws_ecs_task_definition" "app" {
       ]
 
       dependsOn = [
-        { containerName = "mysql", condition = "HEALTHY" },
-        { containerName = "redis", condition = "HEALTHY" }
+        { containerName = "mysql", condition = "HEALTHY" }
       ]
 
       healthCheck = {
@@ -153,72 +129,11 @@ resource "aws_ecs_task_definition" "app" {
           "awslogs-stream-prefix" = "nginx"
         }
       }
-    },
-
-    # Prometheus Container
-    {
-      name      = "prometheus"
-      image     = "prom/prometheus:v2.47.0"
-      essential = false
-
-      portMappings = [
-        { containerPort = 9090, protocol = "tcp" }
-      ]
-
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = "/ecs/${var.project_name}"
-          "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "prometheus"
-        }
-      }
-    },
-
-    # Grafana Container
-    {
-      name      = "grafana"
-      image     = "grafana/grafana:10.2.0"
-      essential = false
-
-      portMappings = [
-        { containerPort = 3000, protocol = "tcp" }
-      ]
-
-      environment = [
-        { name = "GF_SECURITY_ADMIN_USER",     value = "admin" },
-        { name = "GF_SECURITY_ADMIN_PASSWORD",  value = "admin123" },
-        { name = "GF_AWS_DEFAULT_REGION",       value = var.aws_region }
-      ]
-
-      mountPoints = [{
-        sourceVolume  = "grafana-data"
-        containerPath = "/var/lib/grafana"
-        readOnly      = false
-      }]
-
-      dependsOn = [
-        { containerName = "prometheus", condition = "START" }
-      ]
-
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = "/ecs/${var.project_name}"
-          "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "grafana"
-        }
-      }
     }
   ])
 
-  # Volumes for persistent data
   volume {
     name = "mysql-data"
-  }
-
-  volume {
-    name = "grafana-data"
   }
 
   tags = {
