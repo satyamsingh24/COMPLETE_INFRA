@@ -7,7 +7,6 @@ services:
     container_name: backend
     ports:
       - "8085:8085"
-      - "8086:8086"
     depends_on:
       mysql:
         condition: service_healthy
@@ -23,7 +22,7 @@ services:
       - app-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8086/actuator/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8085/actuator/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
