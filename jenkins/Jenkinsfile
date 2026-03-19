@@ -1,4 +1,3 @@
-cat > /mnt/c/Users/ncs/Desktop/Complete_infra/jenkins/Jenkinsfile << 'JENKINSEOF'
 pipeline {
     agent any
 
@@ -60,16 +59,12 @@ pipeline {
                 echo '🚀 Deploying with docker-compose...'
                 sh """
                     cd ${APP_DIR}
-
+                    git pull origin main
                     aws ecr get-login-password --region ${AWS_REGION} | \
                     docker login --username AWS --password-stdin \
                     ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
-
-                    docker-compose pull backend nginx
                     docker-compose down --remove-orphans || true
                     docker-compose up -d
-
-                    echo "✅ Running containers:"
                     docker-compose ps
                 """
             }
@@ -89,17 +84,10 @@ pipeline {
 
     post {
         success {
-            echo '🎉 Pipeline SUCCESS! App deployed!'
+            echo '🎉 Pipeline SUCCESS!'
         }
         failure {
-            echo '❌ Pipeline FAILED! Check logs.'
+            echo '❌ Pipeline FAILED!'
         }
     }
 }
-JENKINSEOF
-
-cd /mnt/c/Users/ncs/Desktop/Complete_infra
-git add jenkins/Jenkinsfile
-git commit -m "Clean Jenkinsfile - removed duplicate steps"
-git push origin main
-echo "✅ Done"
