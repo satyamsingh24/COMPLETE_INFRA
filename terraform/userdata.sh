@@ -1,6 +1,5 @@
 #!/bin/bash
 set -x
-
 exec > >(tee /var/log/userdata.log | logger -t user-data) 2>&1
 
 echo "=== Bootstrap Start ==="
@@ -46,6 +45,58 @@ mkdir -p /opt/app
 chown -R jenkins:jenkins /opt/app
 chmod -R 755 /opt/app
 
+# JCasC config - Admin user + skip wizard
+mkdir -p /var/lib/jenkins/casc_configs
+cat > /var/lib/jenkins/casc_configs/jenkins.yaml << 'CASC'
+jenkins:
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          password: "admin123"
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+  numExecutors: 2
+  slaveAgentPort: 50000
+unclassified:
+  location:
+    url: "http://localhost:8080/"
+jobs:
+  - script: >
+      pipelineJob('COMPLETE_INFRA-Pipeline') {
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('https://github.com/satyamsingh24/COMPLETE_INFRA.git')
+                }
+                branch('*/main')
+              }
+            }
+            scriptPath('jenkins/Jenkinsfile')
+          }
+        }
+        triggers {
+          githubPush()
+        }
+      }
+CASC
+
+chown -R jenkins:jenkins /var/lib/jenkins/casc_configs
+
+# Jenkins systemd override - skip wizard + JCasC
+mkdir -p /etc/systemd/system/jenkins.service.d
+cat > /etc/systemd/system/jenkins.service.d/override.conf << 'OVERRIDE'
+[Service]
+Environment="CASC_JENKINS_CONFIG=/var/lib/jenkins/casc_configs"
+Environment="JAVA_OPTS=-Djenkins.install.runSetupWizard=false"
+OVERRIDE
+
+systemctl daemon-reload
+
 # Start Jenkins
 systemctl enable jenkins
 systemctl start jenkins
@@ -71,64 +122,18 @@ rm -rf /opt/app/COMPLETE_INFRA
 git clone "$GITHUB_REPO" /opt/app/COMPLETE_INFRA || echo "Clone failed"
 chown -R jenkins:jenkins /opt/app/COMPLETE_INFRA
 
-echo "=== Bootstrap Complete ==="
-
-# ─────────────────────────────────────
-# Jenkins Full Automation
-# ─────────────────────────────────────
-
-echo "=== Jenkins Automation Start ==="
-
-# Jenkins ready hone ka wait
+# Wait for Jenkins
 echo "Waiting for Jenkins..."
-sleep 60
+sleep 90
 until curl -s http://localhost:8080/login > /dev/null 2>&1; do
   echo "Jenkins not ready yet..."
   sleep 10
 done
 echo "Jenkins is up!"
 
-# Initial password
-JENKINS_PASS=$(cat /var/lib/jenkins/secrets/initialAdminPassword)
-echo "Jenkins initial password: $JENKINS_PASS"
+# Install plugins via CLI
+curl -fsSL http://localhost:8080/jnlpJars/jenkins-cli.jar -o /tmp/jenkins-cli.jar
 
-# Jenkins CLI download
-curl -fsSL http://localhost:8080/jnlpJars/jenkins-cli.jar \
-  -o /tmp/jenkins-cli.jar || echo "CLI download failed"
-
-# Groovy - Admin user + skip setup wizard
-cat > /tmp/jenkins-setup.groovy << 'GROOVY'
-import jenkins.model.*
-import hudson.security.*
-import jenkins.install.*
-
-def instance = Jenkins.getInstance()
-
-// Skip setup wizard
-instance.setInstallState(InstallState.INITIAL_SETUP_COMPLETED)
-
-// Create admin user
-def hudsonRealm = new HudsonPrivateSecurityRealm(false)
-hudsonRealm.createAccount("admin", "admin123")
-instance.setSecurityRealm(hudsonRealm)
-
-def strategy = new FullControlOnceLoggedInAuthorizationStrategy()
-strategy.setAllowAnonymousRead(false)
-instance.setAuthorizationStrategy(strategy)
-
-instance.save()
-println "Admin user created successfully!"
-GROOVY
-
-# Run groovy script
-java -jar /tmp/jenkins-cli.jar \
-  -s http://localhost:8080 \
-  -auth "admin:$JENKINS_PASS" \
-  groovy = < /tmp/jenkins-setup.groovy || echo "Groovy setup failed"
-
-sleep 10
-
-# Install plugins
 java -jar /tmp/jenkins-cli.jar \
   -s http://localhost:8080 \
   -auth admin:admin123 \
@@ -140,71 +145,24 @@ java -jar /tmp/jenkins-cli.jar \
   aws-credentials \
   pipeline-aws \
   github \
+  job-dsl \
+  configuration-as-code \
   -restart || echo "Plugin install failed"
 
-echo "Waiting for Jenkins restart after plugins..."
+echo "Waiting for restart..."
 sleep 90
 until curl -s http://localhost:8080/login > /dev/null 2>&1; do
-  echo "Waiting..."
   sleep 10
 done
-echo "Jenkins restarted!"
 
-# Create Pipeline Job
-cat > /tmp/pipeline-job.xml << 'JOBXML'
-<?xml version='1.1' encoding='UTF-8'?>
-<flow-definition plugin="workflow-job">
-  <description>COMPLETE_INFRA Pipeline</description>
-  <keepDependencies>false</keepDependencies>
-  <properties>
-    <org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
-      <triggers>
-        <com.cloudbees.jenkins.GitHubPushTrigger plugin="github">
-          <spec></spec>
-        </com.cloudbees.jenkins.GitHubPushTrigger>
-      </triggers>
-    </org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
-  </properties>
-  <definition class="org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition" plugin="workflow-cps">
-    <scm class="hudson.plugins.git.GitSCM" plugin="git">
-      <configVersion>2</configVersion>
-      <userRemoteConfigs>
-        <hudson.plugins.git.UserRemoteConfig>
-          <url>https://github.com/satyamsingh24/COMPLETE_INFRA.git</url>
-        </hudson.plugins.git.UserRemoteConfig>
-      </userRemoteConfigs>
-      <branches>
-        <hudson.plugins.git.BranchSpec>
-          <name>*/main</name>
-        </hudson.plugins.git.BranchSpec>
-      </branches>
-    </scm>
-    <scriptPath>jenkins/Jenkinsfile</scriptPath>
-    <lightweight>true</lightweight>
-  </definition>
-  <triggers/>
-  <disabled>false</disabled>
-</flow-definition>
-JOBXML
-
-# Create job
-java -jar /tmp/jenkins-cli.jar \
-  -s http://localhost:8080 \
-  -auth admin:admin123 \
-  create-job COMPLETE_INFRA-Pipeline < /tmp/pipeline-job.xml || echo "Job creation failed"
-
-sleep 5
-
-# Trigger first build
+# Trigger build
 java -jar /tmp/jenkins-cli.jar \
   -s http://localhost:8080 \
   -auth admin:admin123 \
   build COMPLETE_INFRA-Pipeline || echo "Build trigger failed"
 
 PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
-echo "=== Jenkins Automation Complete ==="
-echo "Jenkins URL  : http://$PUBLIC_IP:8080"
-echo "Username     : admin"
-echo "Password     : admin123"
-echo "Job          : COMPLETE_INFRA-Pipeline"
-echo "Build        : Triggered!"
+echo "=== Bootstrap Complete ==="
+echo "Jenkins URL : http://$PUBLIC_IP:8080"
+echo "Username    : admin"
+echo "Password    : admin123"
