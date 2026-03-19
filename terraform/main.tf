@@ -29,19 +29,3 @@ data "aws_ami" "amazon_linux" {
 }
 
 # Terraform apply hone ke baad GitHub pe push karo
-resource "null_resource" "git_push" {
-  triggers = {
-    always_run = timestamp()
-  }
-
-  provisioner "local-exec" {
-    command = <<-CMD
-      cd ${path.module}/..
-      git add .
-      git commit -m "Auto push after terraform apply - $(date)" || true
-      git push origin main || true
-    CMD
-  }
-
-  depends_on = [aws_instance.jenkins]
-}

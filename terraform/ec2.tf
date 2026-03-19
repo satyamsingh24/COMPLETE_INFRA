@@ -113,12 +113,12 @@ resource "aws_instance" "jenkins" {
   }
 }
 
-resource "aws_security_group_rule" "ecs_from_alb" {
-  type                     = "ingress"
-  from_port                = 5000
-  to_port                  = 5000
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.alb.id
-  security_group_id        = aws_security_group.jenkins_ec2.id
-  description              = "Allow ALB to ECS on port 5000"
-}
+# resource "aws_security_group_rule" "ecs_from_alb" {
+#   type                     = "ingress"
+#   from_port                = 5000
+#   to_port                  = 5000
+#   protocol                 = "tcp"
+#   source_security_group_id = aws_security_group.alb.id
+#   security_group_id        = aws_security_group.jenkins_ec2.id
+#   description              = "Allow ALB to ECS on port 5000"
+# }

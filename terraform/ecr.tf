@@ -1,15 +1,25 @@
-resource "aws_ecr_repository" "app" {
-  name                 = "${var.project_name}-app"
+resource "aws_ecr_repository" "backend" {
+  name                 = "${var.project_name}-backend"
   image_tag_mutability = "MUTABLE"
-  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
   }
 
   tags = {
-    Name        = "${var.project_name}-ecr"
-    Environment = var.environment
+    Name = "${var.project_name}-backend"
   }
 }
 
+resource "aws_ecr_repository" "nginx" {
+  name                 = "${var.project_name}-nginx"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Name = "${var.project_name}-nginx"
+  }
+}

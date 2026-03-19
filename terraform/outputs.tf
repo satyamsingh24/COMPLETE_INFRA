@@ -23,9 +23,15 @@ output "alb_dns" {
   value       = "http://${aws_lb.app.dns_name}"
 }
 
-output "ecr_repository_uri" {
-  description = "ECR Repository URI"
-  value       = aws_ecr_repository.app.repository_url
+# aws_ecr_repository.app → backend se replace kiya
+output "ecr_backend_uri" {
+  description = "ECR Backend Repository URI"
+  value       = aws_ecr_repository.backend.repository_url
+}
+
+output "ecr_nginx_uri" {
+  description = "ECR Nginx Repository URI"
+  value       = aws_ecr_repository.nginx.repository_url
 }
 
 output "sns_topic_arn" {

@@ -2,12 +2,14 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION     = 'ap-south-1'
-        AWS_ACCOUNT_ID = '176583374037'
-        ECR_BACKEND    = '176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-app-backend'
-        ECR_NGINX      = '176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-app-nginx'
-        IMAGE_TAG      = "${BUILD_NUMBER}"
-        APP_DIR        = '/opt/app/COMPLETE_INFRA'
+        AWS_REGION        = 'ap-south-1'
+        AWS_ACCOUNT_ID    = '176583374037'
+        ECR_BACKEND       = '176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-backend'
+        ECR_NGINX         = '176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-nginx'
+        IMAGE_TAG         = "${BUILD_NUMBER}"
+        ECS_CLUSTER       = 'complete-infra-cluster'
+        ECS_SERVICE       = 'complete-infra-service'
+        TASK_DEFINITION   = 'complete-infra-task'
     }
 
     stages {
@@ -26,6 +28,29 @@ pipeline {
                     aws ecr get-login-password --region ${AWS_REGION} | \
                     docker login --username AWS --password-stdin \
                     ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                """
+            }
+        }
+
+        stage('Ensure ECR Repos Exist') {
+            steps {
+                echo '📦 Ensuring ECR repositories exist...'
+                sh """
+                    aws ecr describe-repositories \
+                        --repository-names complete-infra-app-backend \
+                        --region ${AWS_REGION} 2>/dev/null || \
+                    aws ecr create-repository \
+                        --repository-name complete-infra-app-backend \
+                        --region ${AWS_REGION} \
+                        --image-scanning-configuration scanOnPush=true
+
+                    aws ecr describe-repositories \
+                        --repository-names complete-infra-app-nginx \
+                        --region ${AWS_REGION} 2>/dev/null || \
+                    aws ecr create-repository \
+                        --repository-name complete-infra-app-nginx \
+                        --region ${AWS_REGION} \
+                        --image-scanning-configuration scanOnPush=true
                 """
             }
         }
@@ -54,18 +79,24 @@ pipeline {
             }
         }
 
-        stage('Deploy') {
+        stage('Deploy to ECS') {
             steps {
-                echo '🚀 Deploying with docker-compose...'
+                echo '🚀 Deploying to ECS...'
                 sh """
-                    cd ${APP_DIR}
-                    git pull origin main
-                    aws ecr get-login-password --region ${AWS_REGION} | \
-                    docker login --username AWS --password-stdin \
-                    ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
-                    docker-compose down --remove-orphans || true
-                    docker-compose up -d
-                    docker-compose ps
+                    # ECS service force new deployment
+                    aws ecs update-service \
+                        --cluster ${ECS_CLUSTER} \
+                        --service ${ECS_SERVICE} \
+                        --force-new-deployment \
+                        --region ${AWS_REGION}
+
+                    # Deploy hone ka wait karo
+                    aws ecs wait services-stable \
+                        --cluster ${ECS_CLUSTER} \
+                        --services ${ECS_SERVICE} \
+                        --region ${AWS_REGION}
+
+                    echo '✅ ECS Deployment complete!'
                 """
             }
         }
@@ -74,9 +105,15 @@ pipeline {
             steps {
                 echo '✅ Health Check...'
                 sh """
-                    sleep 60
-                    curl -f http://localhost:8086/actuator/health && echo "✅ Backend OK" || echo "⚠️ Backend not ready"
-                    curl -f http://localhost:80 && echo "✅ Nginx OK" || echo "⚠️ Nginx not ready"
+                    sleep 30
+                    ALB_DNS=\$(aws elbv2 describe-load-balancers \
+                        --names complete-infra-alb \
+                        --region ${AWS_REGION} \
+                        --query 'LoadBalancers[0].DNSName' \
+                        --output text)
+                    
+                    echo "ALB DNS: \$ALB_DNS"
+                    curl -f http://\$ALB_DNS && echo "✅ App OK!" || echo "⚠️ App not ready yet"
                 """
             }
         }
@@ -84,7 +121,7 @@ pipeline {
 
     post {
         success {
-            echo '🎉 Pipeline SUCCESS!'
+            echo '🎉 Pipeline SUCCESS! App ECS pe chal raha hai!'
         }
         failure {
             echo '❌ Pipeline FAILED!'

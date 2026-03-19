@@ -4,10 +4,7 @@ exec > >(tee /var/log/userdata.log | logger -t user-data) 2>&1
 
 echo "=== Bootstrap Start ==="
 
-# System update
 dnf update -y --allowerasing || echo "Update failed"
-
-# Basic tools
 dnf install -y git unzip curl java-17-amazon-corretto-headless --allowerasing || echo "Basic install failed"
 
 # Docker
@@ -21,7 +18,6 @@ echo "Docker: $(docker --version)"
 curl -fsSL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
   -o /usr/local/bin/docker-compose || echo "Compose download failed"
 chmod +x /usr/local/bin/docker-compose
-echo "docker-compose: $(docker-compose --version)"
 
 # Jenkins repo
 tee /etc/yum.repos.d/jenkins.repo << 'JENREPO'
@@ -32,7 +28,7 @@ gpgcheck=0
 enabled=1
 JENREPO
 
-rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key || echo "Jenkins key import failed"
+rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key || true
 dnf install -y jenkins --nogpgcheck || { echo "Jenkins install failed"; exit 1; }
 
 # Jenkins permissions
@@ -45,7 +41,7 @@ mkdir -p /opt/app
 chown -R jenkins:jenkins /opt/app
 chmod -R 755 /opt/app
 
-# JCasC config - Admin user + skip wizard
+# JCasC config
 mkdir -p /var/lib/jenkins/casc_configs
 cat > /var/lib/jenkins/casc_configs/jenkins.yaml << 'CASC'
 jenkins:
@@ -63,31 +59,24 @@ jenkins:
 unclassified:
   location:
     url: "http://localhost:8080/"
-jobs:
-  - script: >
-      pipelineJob('COMPLETE_INFRA-Pipeline') {
-        definition {
-          cpsScm {
-            scm {
-              git {
-                remote {
-                  url('https://github.com/satyamsingh24/COMPLETE_INFRA.git')
-                }
-                branch('*/main')
-              }
-            }
-            scriptPath('jenkins/Jenkinsfile')
-          }
-        }
-        triggers {
-          githubPush()
-        }
-      }
+    adminAddress: "admin@example.com"
 CASC
 
 chown -R jenkins:jenkins /var/lib/jenkins/casc_configs
 
-# Jenkins systemd override - skip wizard + JCasC
+# Jenkins URL config file - fixes CLI 403 error
+mkdir -p /var/lib/jenkins
+cat > /var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml << 'URLCONF'
+<?xml version="1.1" encoding="UTF-8"?>
+<jenkins.model.JenkinsLocationConfiguration>
+  <adminAddress>admin@example.com</adminAddress>
+  <jenkinsUrl>http://localhost:8080/</jenkinsUrl>
+</jenkins.model.JenkinsLocationConfiguration>
+URLCONF
+
+chown jenkins:jenkins /var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml
+
+# Jenkins systemd override
 mkdir -p /etc/systemd/system/jenkins.service.d
 cat > /etc/systemd/system/jenkins.service.d/override.conf << 'OVERRIDE'
 [Service]
@@ -96,8 +85,6 @@ Environment="JAVA_OPTS=-Djenkins.install.runSetupWizard=false"
 OVERRIDE
 
 systemctl daemon-reload
-
-# Start Jenkins
 systemctl enable jenkins
 systemctl start jenkins
 echo "Jenkins: $(systemctl is-active jenkins)"
@@ -126,27 +113,22 @@ chown -R jenkins:jenkins /opt/app/COMPLETE_INFRA
 echo "Waiting for Jenkins..."
 sleep 90
 until curl -s http://localhost:8080/login > /dev/null 2>&1; do
-  echo "Jenkins not ready yet..."
+  echo "Jenkins not ready..."
   sleep 10
 done
 echo "Jenkins is up!"
 
-# Install plugins via CLI
+# Jenkins CLI
 curl -fsSL http://localhost:8080/jnlpJars/jenkins-cli.jar -o /tmp/jenkins-cli.jar
 
+# Install plugins
 java -jar /tmp/jenkins-cli.jar \
   -s http://localhost:8080 \
   -auth admin:admin123 \
   install-plugin \
-  git \
-  workflow-aggregator \
-  docker-workflow \
-  amazon-ecr \
-  aws-credentials \
-  pipeline-aws \
-  github \
-  job-dsl \
-  configuration-as-code \
+  git workflow-aggregator docker-workflow \
+  amazon-ecr aws-credentials pipeline-aws \
+  github job-dsl configuration-as-code \
   -restart || echo "Plugin install failed"
 
 echo "Waiting for restart..."
@@ -154,15 +136,57 @@ sleep 90
 until curl -s http://localhost:8080/login > /dev/null 2>&1; do
   sleep 10
 done
+echo "Jenkins restarted!"
+
+# Create Pipeline Job
+cat > /tmp/pipeline-job.xml << 'JOBXML'
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job">
+  <description>COMPLETE_INFRA Pipeline</description>
+  <keepDependencies>false</keepDependencies>
+  <properties/>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition" plugin="workflow-cps">
+    <scm class="hudson.plugins.git.GitSCM" plugin="git">
+      <configVersion>2</configVersion>
+      <userRemoteConfigs>
+        <hudson.plugins.git.UserRemoteConfig>
+          <url>https://github.com/satyamsingh24/COMPLETE_INFRA.git</url>
+        </hudson.plugins.git.UserRemoteConfig>
+      </userRemoteConfigs>
+      <branches>
+        <hudson.plugins.git.BranchSpec>
+          <name>*/main</name>
+        </hudson.plugins.git.BranchSpec>
+      </branches>
+    </scm>
+    <scriptPath>jenkins/Jenkinsfile</scriptPath>
+    <lightweight>true</lightweight>
+  </definition>
+  <disabled>false</disabled>
+</flow-definition>
+JOBXML
+
+java -jar /tmp/jenkins-cli.jar \
+  -s http://localhost:8080 \
+  -auth admin:admin123 \
+  create-job COMPLETE_INFRA-Pipeline < /tmp/pipeline-job.xml || \
+java -jar /tmp/jenkins-cli.jar \
+  -s http://localhost:8080 \
+  -auth admin:admin123 \
+  update-job COMPLETE_INFRA-Pipeline < /tmp/pipeline-job.xml
+
+echo "✅ Job created/updated!"
 
 # Trigger build
 java -jar /tmp/jenkins-cli.jar \
   -s http://localhost:8080 \
   -auth admin:admin123 \
-  build COMPLETE_INFRA-Pipeline || echo "Build trigger failed"
+  build COMPLETE_INFRA-Pipeline
+
+echo "✅ Build triggered!"
 
 PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
 echo "=== Bootstrap Complete ==="
-echo "Jenkins URL : http://$PUBLIC_IP:8080"
-echo "Username    : admin"
-echo "Password    : admin123"
+echo "Jenkins : http://$PUBLIC_IP:8080"
+echo "Username: admin"
+echo "Password: admin123"

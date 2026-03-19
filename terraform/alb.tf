@@ -1,20 +1,3 @@
-# Second Public Subnet for ALB
-resource "aws_subnet" "public2" {
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.2.0/24"
-  map_public_ip_on_launch = true
-  availability_zone       = "${var.aws_region}b"
-
-  tags = {
-    Name = "${var.project_name}-public-subnet-2"
-  }
-}
-
-resource "aws_route_table_association" "public2" {
-  subnet_id      = aws_subnet.public2.id
-  route_table_id = aws_route_table.public.id
-}
-
 # ALB Security Group
 resource "aws_security_group" "alb" {
   name        = "${var.project_name}-alb-sg"
@@ -40,6 +23,23 @@ resource "aws_security_group" "alb" {
   }
 }
 
+# Second Public Subnet for ALB
+resource "aws_subnet" "public2" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.2.0/24"
+  map_public_ip_on_launch = true
+  availability_zone       = "${var.aws_region}b"
+
+  tags = {
+    Name = "${var.project_name}-public-subnet-2"
+  }
+}
+
+resource "aws_route_table_association" "public2" {
+  subnet_id      = aws_subnet.public2.id
+  route_table_id = aws_route_table.public.id
+}
+
 # ALB
 resource "aws_lb" "app" {
   name               = "${var.project_name}-alb"
@@ -54,23 +54,24 @@ resource "aws_lb" "app" {
   }
 }
 
-# Target Group
-resource "aws_lb_target_group" "app" {
-  name        = "${var.project_name}-tg"
-  port        = 5000
+# Target Group - Nginx ke liye
+resource "aws_lb_target_group" "nginx" {
+  name        = "${var.project_name}-nginx-tg"
+  port        = 80
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
   target_type = "ip"
 
   health_check {
-    path                = "/health"
+    path                = "/"
     healthy_threshold   = 2
     unhealthy_threshold = 3
     interval            = 30
+    matcher             = "200-399"
   }
 
   tags = {
-    Name = "${var.project_name}-tg"
+    Name = "${var.project_name}-nginx-tg"
   }
 }
 
@@ -82,7 +83,6 @@ resource "aws_lb_listener" "app" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.app.arn
+    target_group_arn = aws_lb_target_group.nginx.arn
   }
 }
-
