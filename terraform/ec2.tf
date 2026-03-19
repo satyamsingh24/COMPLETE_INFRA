@@ -96,33 +96,33 @@ resource "aws_iam_instance_profile" "ec2_profile" {
 }
 
 locals {
-  userdata = <<-USERDATA
-    #!/bin/bash
-    exec > /tmp/userdata.log 2>&1
-    echo "=== Bootstrap Start ==="
+  userdata = <<USERDATA
+#!/bin/bash
+exec > /tmp/userdata.log 2>&1
+echo "=== Bootstrap Start ==="
 
-    # System update
-    dnf update -y --allowerasing || true
+# System update
+dnf update -y --allowerasing || true
 
-    # Basic tools - allowerasing fixes curl-minimal conflict
-    dnf install -y git unzip --allowerasing || true
-    dnf install -y java-17-amazon-corretto-headless --allowerasing || true
+# Basic tools - allowerasing fixes curl-minimal conflict
+dnf install -y git unzip --allowerasing || true
+dnf install -y java-17-amazon-corretto-headless --allowerasing || true
 
-    # Docker
-    dnf install -y docker || true
-    systemctl enable docker || true
-    systemctl start docker || true
-    usermod -aG docker ec2-user || true
-    echo "Docker: $(docker --version 2>/dev/null)" >> /tmp/userdata.log
+# Docker
+dnf install -y docker || true
+systemctl enable docker || true
+systemctl start docker || true
+usermod -aG docker ec2-user || true
+echo "Docker: $(docker --version 2>/dev/null)" >> /tmp/userdata.log
 
-    # docker-compose
-    curl -fsSL https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64 \
-      -o /usr/local/bin/docker-compose || true
-    chmod +x /usr/local/bin/docker-compose || true
-    echo "docker-compose: $(docker-compose --version 2>/dev/null)" >> /tmp/userdata.log
+# docker-compose
+curl -fsSL https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64 \
+-o /usr/local/bin/docker-compose || true
+chmod +x /usr/local/bin/docker-compose || true
+echo "docker-compose: $(docker-compose --version 2>/dev/null)" >> /tmp/userdata.log
 
-    # Jenkins repo - tee method (curl redirect fix)
-    tee /etc/yum.repos.d/jenkins.repo << 'JENREPO'
+# Jenkins repo - tee method (curl redirect fix)
+tee /etc/yum.repos.d/jenkins.repo << 'JENREPO'
 [jenkins]
 name=Jenkins-Stable
 baseurl=https://pkg.jenkins.io/redhat-stable/
