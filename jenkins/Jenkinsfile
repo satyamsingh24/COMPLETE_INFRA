@@ -1,3 +1,4 @@
+cat > /mnt/c/Users/ncs/Desktop/Complete_infra/jenkins/Jenkinsfile << 'JENKINSEOF'
 pipeline {
     agent any
 
@@ -8,7 +9,6 @@ pipeline {
         ECR_NGINX      = '176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-app-nginx'
         IMAGE_TAG      = "${BUILD_NUMBER}"
         APP_DIR        = '/opt/app/COMPLETE_INFRA'
-        GITHUB_URL     = 'https://github.com/satyamsingh24/COMPLETE_INFRA.git'
     }
 
     stages {
@@ -55,42 +55,6 @@ pipeline {
             }
         }
 
-        stage('Clone or Update') {
-            steps {
-                echo '📥 Clone/Update project...'
-                sh """
-                    # Jenkins ke liye /opt/app use karo
-                    sudo mkdir -p /opt/app
-                    sudo chown -R jenkins:jenkins /opt/app
-
-                    if [ -d "${APP_DIR}/.git" ]; then
-                        echo "Pulling latest..."
-                        cd ${APP_DIR} && git pull origin main
-                    else
-                        echo "Cloning fresh..."
-                        git clone ${GITHUB_URL} ${APP_DIR}
-                    fi
-
-                    echo "✅ Code ready:"
-                    ls ${APP_DIR}
-                """
-            }
-        }
-
-        stage('Install docker-compose') {
-            steps {
-                echo '⚙️ Checking docker-compose...'
-                sh """
-                    if ! command -v docker-compose > /dev/null 2>&1; then
-                        sudo curl -L https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64 \
-                            -o /usr/local/bin/docker-compose
-                        sudo chmod +x /usr/local/bin/docker-compose
-                    fi
-                    docker-compose --version
-                """
-            }
-        }
-
         stage('Deploy') {
             steps {
                 echo '🚀 Deploying with docker-compose...'
@@ -101,8 +65,9 @@ pipeline {
                     docker login --username AWS --password-stdin \
                     ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
 
+                    docker-compose pull backend nginx
                     docker-compose down --remove-orphans || true
-                    docker-compose up -d --build
+                    docker-compose up -d
 
                     echo "✅ Running containers:"
                     docker-compose ps
@@ -131,3 +96,10 @@ pipeline {
         }
     }
 }
+JENKINSEOF
+
+cd /mnt/c/Users/ncs/Desktop/Complete_infra
+git add jenkins/Jenkinsfile
+git commit -m "Clean Jenkinsfile - removed duplicate steps"
+git push origin main
+echo "✅ Done"
