@@ -56,7 +56,6 @@ resource "aws_security_group" "jenkins_ec2" {
   }
 }
 
-# IAM Role
 resource "aws_iam_role" "ec2_role" {
   name = "${var.project_name}-ec2-role"
 
@@ -99,56 +98,54 @@ resource "aws_iam_instance_profile" "ec2_profile" {
 locals {
   userdata = <<-USERDATA
     #!/bin/bash
-    set -e
-    exec > /var/log/userdata.log 2>&1
-
-    echo "==============================="
-    echo " COMPLETE_INFRA Bootstrap Start"
-    echo "==============================="
+    exec > /tmp/userdata.log 2>&1
+    echo "=== Bootstrap Start ==="
 
     # System update
-    dnf update -y
+    dnf update -y --allowerasing || true
 
-    # Basic tools
-    dnf install -y git curl unzip
-    echo "✅ Git: $(git --version)"
-
-    # Java 17
-    dnf install -y java-17-amazon-corretto-headless
-    echo "✅ Java: $(java -version 2>&1 | head -1)"
+    # Basic tools - allowerasing fixes curl-minimal conflict
+    dnf install -y git unzip --allowerasing || true
+    dnf install -y java-17-amazon-corretto-headless --allowerasing || true
 
     # Docker
-    dnf install -y docker
-    systemctl enable docker
-    systemctl start docker
-    usermod -aG docker ec2-user
-    echo "✅ Docker: $(docker --version)"
+    dnf install -y docker || true
+    systemctl enable docker || true
+    systemctl start docker || true
+    usermod -aG docker ec2-user || true
+    echo "Docker: $(docker --version 2>/dev/null)" >> /tmp/userdata.log
 
     # docker-compose
-    curl -L https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64 \
-      -o /usr/local/bin/docker-compose
-    chmod +x /usr/local/bin/docker-compose
-    echo "✅ docker-compose: $(docker-compose --version)"
+    curl -fsSL https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64 \
+      -o /usr/local/bin/docker-compose || true
+    chmod +x /usr/local/bin/docker-compose || true
+    echo "docker-compose: $(docker-compose --version 2>/dev/null)" >> /tmp/userdata.log
 
-    # Jenkins
-    curl -o /etc/yum.repos.d/jenkins.repo \
-      https://pkg.jenkins.io/redhat-stable/jenkins.repo
-    rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
-    dnf install -y jenkins --nogpgcheck
+    # Jenkins repo - tee method (curl redirect fix)
+    tee /etc/yum.repos.d/jenkins.repo << 'JENREPO'
+[jenkins]
+name=Jenkins-Stable
+baseurl=https://pkg.jenkins.io/redhat-stable/
+gpgcheck=0
+enabled=1
+JENREPO
+    rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key || true
+    dnf install -y jenkins --nogpgcheck || true
+    echo "Jenkins installed: $?" >> /tmp/userdata.log
 
-    # Jenkins sudoers - NO PASSWORD REQUIRED
+    # Jenkins sudoers - NO PASSWORD
     echo "jenkins ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/jenkins
     chmod 440 /etc/sudoers.d/jenkins
 
     # Jenkins docker group
-    usermod -aG docker jenkins
+    usermod -aG docker jenkins || true
 
     # /opt/app directory for deployments
     mkdir -p /opt/app
     chown -R jenkins:jenkins /opt/app
     chmod -R 755 /opt/app
 
-    # Jenkins config - fix slaveAgentPort and executors
+    # Jenkins config - fix node offline + slaveAgentPort
     mkdir -p /var/lib/jenkins
     cat > /var/lib/jenkins/config.xml << 'JENKINSCONF'
 <?xml version='1.1' encoding='UTF-8'?>
@@ -196,36 +193,32 @@ locals {
 </hudson>
 JENKINSCONF
 
-    chown -R jenkins:jenkins /var/lib/jenkins
-    systemctl enable jenkins
-    systemctl start jenkins
-    echo "✅ Jenkins started"
+    chown -R jenkins:jenkins /var/lib/jenkins || true
+    systemctl enable jenkins || true
+    systemctl start jenkins || true
+    echo "Jenkins status: $(systemctl is-active jenkins)" >> /tmp/userdata.log
 
     # AWS CLI v2
-    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
-    unzip -q /tmp/awscliv2.zip -d /tmp
-    /tmp/aws/install
-    echo "✅ AWS CLI: $(aws --version)"
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" \
+      -o "/tmp/awscliv2.zip" || true
+    unzip -q /tmp/awscliv2.zip -d /tmp || true
+    /tmp/aws/install || true
+    echo "AWS CLI: $(aws --version 2>/dev/null)" >> /tmp/userdata.log
 
     # Terraform binary
-    curl -Lo /tmp/terraform.zip \
-      https://releases.hashicorp.com/terraform/1.7.5/terraform_1.7.5_linux_amd64.zip
-    unzip -q /tmp/terraform.zip -d /tmp
-    mv /tmp/terraform /usr/local/bin/
-    chmod +x /usr/local/bin/terraform
-    echo "✅ Terraform: $(terraform version | head -1)"
+    curl -fsSL -Lo /tmp/terraform.zip \
+      https://releases.hashicorp.com/terraform/1.7.5/terraform_1.7.5_linux_amd64.zip || true
+    unzip -q /tmp/terraform.zip -d /tmp || true
+    mv /tmp/terraform /usr/local/bin/ || true
+    chmod +x /usr/local/bin/terraform || true
+    echo "Terraform: $(terraform version 2>/dev/null | head -1)" >> /tmp/userdata.log
 
     # Clone project
     git clone ${var.github_repo_url} /opt/app/COMPLETE_INFRA || true
     chown -R jenkins:jenkins /opt/app/COMPLETE_INFRA || true
 
-    # Expand /tmp
-    mount -o remount,size=2G /tmp || true
-
-    echo "==============================="
-    echo " Bootstrap Complete!"
-    echo "==============================="
-    echo "Jenkins Password: $(cat /var/lib/jenkins/secrets/initialAdminPassword 2>/dev/null || echo 'wait 2 min')"
+    echo "=== Bootstrap Complete ===" >> /tmp/userdata.log
+    echo "Jenkins Password: $(cat /var/lib/jenkins/secrets/initialAdminPassword 2>/dev/null || echo 'wait 2 min')" >> /tmp/userdata.log
   USERDATA
 }
 
