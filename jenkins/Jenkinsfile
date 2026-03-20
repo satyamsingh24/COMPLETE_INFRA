@@ -4,8 +4,8 @@ pipeline {
     environment {
         AWS_REGION     = 'ap-south-1'
         AWS_ACCOUNT_ID = '176583374037'
-        ECR_BACKEND    = '176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-app-backend'
-        ECR_NGINX      = '176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-app-nginx'
+        ECR_BACKEND = '176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-app-backend'
+        ECR_NGINX   = '176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-app-nginx'
         IMAGE_TAG      = "${BUILD_NUMBER}"
         APP_DIR        = '/opt/app/COMPLETE_INFRA'
     }
