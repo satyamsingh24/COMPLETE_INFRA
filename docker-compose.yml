@@ -86,20 +86,23 @@ services:
     image: grafana/grafana:10.2.0
     container_name: grafana
     ports:
-      - "3000:3000"
+    - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
-      - GF_AWS_DEFAULT_REGION=ap-south-1
-      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+    - GF_SECURITY_ADMIN_USER=admin
+    - GF_SECURITY_ADMIN_PASSWORD=admin123
+    - GF_AWS_DEFAULT_REGION=ap-south-1
+    - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+    - AWS_SDK_LOAD_CONFIG=true
+    extra_hosts:
+    - "host.docker.internal:host-gateway"
     volumes:
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
-      - grafana_data:/var/lib/grafana
+    - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    - grafana_data:/var/lib/grafana
     networks:
-      - app-network
+    - app-network
     restart: unless-stopped
     depends_on:
-      - prometheus
+    - prometheus
 
 volumes:
   grafana_data:
