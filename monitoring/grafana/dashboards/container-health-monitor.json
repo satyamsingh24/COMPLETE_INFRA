@@ -1,0 +1,78 @@
+{
+  "title": "Container Health Monitor",
+  "uid": "container-health-monitor",
+  "panels": [
+    {
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [{"options": {"0": {"color": "green", "text": "✅ UP"}, "1": {"color": "red", "text": "🚨 DOWN"}}, "type": "value"}],
+          "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "background", "reduceOptions": {"calcs": ["lastNotNull"]}, "textMode": "auto"},
+      "targets": [{"datasource": {"type": "cloudwatch", "uid": "${DS_CLOUDWATCH}"}, "dimensions": {"InstanceId": "i-0c26d6e666af4aa02"}, "metricName": "StatusCheckFailed", "namespace": "AWS/EC2", "period": "60", "refId": "A", "region": "ap-south-1", "statistics": ["Maximum"]}],
+      "title": "Backend Status",
+      "type": "stat"
+    },
+    {
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}},
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 0},
+      "id": 2,
+      "options": {"colorMode": "background", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "targets": [{"datasource": {"type": "cloudwatch", "uid": "${DS_CLOUDWATCH}"}, "dimensions": {"LoadBalancer": "app/complete-infra-alb/2d7da2c3d18073ae", "TargetGroup": "targetgroup/complete-infra-nginx-tg/acd4ca79e29b43eb"}, "metricName": "HealthyHostCount", "namespace": "AWS/ApplicationELB", "period": "60", "refId": "A", "region": "ap-south-1", "statistics": ["Minimum"]}],
+      "title": "ALB Healthy Hosts",
+      "type": "stat"
+    },
+    {
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}},
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 0},
+      "id": 3,
+      "options": {"colorMode": "background", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "targets": [{"datasource": {"type": "cloudwatch", "uid": "${DS_CLOUDWATCH}"}, "dimensions": {"LoadBalancer": "app/complete-infra-alb/2d7da2c3d18073ae", "TargetGroup": "targetgroup/complete-infra-nginx-tg/acd4ca79e29b43eb"}, "metricName": "UnHealthyHostCount", "namespace": "AWS/ApplicationELB", "period": "60", "refId": "A", "region": "ap-south-1", "statistics": ["Maximum"]}],
+      "title": "ALB Unhealthy Hosts",
+      "type": "stat"
+    },
+    {
+      "fieldConfig": {"defaults": {"color": {"fixedColor": "red", "mode": "fixed"}, "custom": {"fillOpacity": 20}, "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "id": 4,
+      "targets": [{"datasource": {"type": "cloudwatch", "uid": "${DS_CLOUDWATCH}"}, "dimensions": {"LoadBalancer": "app/complete-infra-alb/2d7da2c3d18073ae"}, "metricName": "HTTPCode_ELB_5XX_Count", "namespace": "AWS/ApplicationELB", "period": "60", "refId": "A", "region": "ap-south-1", "statistics": ["Sum"]}],
+      "title": "5XX Errors - Container Down Indicator",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {"defaults": {"custom": {"fillOpacity": 10}}, "overrides": [{"matcher": {"id": "byName", "options": "UnHealthyHostCount"}, "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]}, {"matcher": {"id": "byName", "options": "HealthyHostCount"}, "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]}]},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "id": 5,
+      "targets": [
+        {"datasource": {"type": "cloudwatch", "uid": "${DS_CLOUDWATCH}"}, "dimensions": {"LoadBalancer": "app/complete-infra-alb/2d7da2c3d18073ae", "TargetGroup": "targetgroup/complete-infra-nginx-tg/acd4ca79e29b43eb"}, "metricName": "HealthyHostCount", "namespace": "AWS/ApplicationELB", "period": "60", "refId": "A", "region": "ap-south-1", "statistics": ["Minimum"]},
+        {"datasource": {"type": "cloudwatch", "uid": "${DS_CLOUDWATCH}"}, "dimensions": {"LoadBalancer": "app/complete-infra-alb/2d7da2c3d18073ae", "TargetGroup": "targetgroup/complete-infra-nginx-tg/acd4ca79e29b43eb"}, "metricName": "UnHealthyHostCount", "namespace": "AWS/ApplicationELB", "period": "60", "refId": "B", "region": "ap-south-1", "statistics": ["Maximum"]}
+      ],
+      "title": "Healthy vs Unhealthy Hosts Over Time",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {"defaults": {"color": {"fixedColor": "red", "mode": "fixed"}, "custom": {"fillOpacity": 30}, "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "id": 6,
+      "targets": [{"datasource": {"type": "cloudwatch", "uid": "${DS_CLOUDWATCH}"}, "dimensions": {"InstanceId": "i-0c26d6e666af4aa02"}, "metricName": "StatusCheckFailed", "namespace": "AWS/EC2", "period": "60", "refId": "A", "region": "ap-south-1", "statistics": ["Maximum"]}],
+      "title": "EC2 Status Check Failed",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {"defaults": {"color": {"fixedColor": "orange", "mode": "fixed"}, "custom": {"fillOpacity": 20}}},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "id": 7,
+      "targets": [{"datasource": {"type": "cloudwatch", "uid": "${DS_CLOUDWATCH}"}, "dimensions": {"LoadBalancer": "app/complete-infra-alb/2d7da2c3d18073ae"}, "metricName": "HTTPCode_ELB_4XX_Count", "namespace": "AWS/ApplicationELB", "period": "60", "refId": "A", "region": "ap-south-1", "statistics": ["Sum"]}],
+      "title": "ALB 4XX Errors",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 36,
+  "time": {"from": "now-3h", "to": "now"},
+  "__inputs": [{"name": "DS_CLOUDWATCH", "type": "datasource", "pluginId": "cloudwatch"}]
+}
