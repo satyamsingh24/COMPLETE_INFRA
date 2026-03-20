@@ -1,9 +1,7 @@
 services:
 
   backend:
-    image: 176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-app-backend:latest
-    build:
-      context: ./backend
+    image: 176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-backend:latest
     container_name: backend
     ports:
       - "8085:8085"
@@ -36,7 +34,7 @@ services:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: mydb
     volumes:
-      - mysql-data:/var/lib/mysql
+      - /data/mysql/data:/var/lib/mysql
     networks:
       - app-network
     healthcheck:
@@ -60,9 +58,7 @@ services:
       start_period: 10s
 
   nginx:
-    image: 176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-app-nginx:latest
-    build:
-      context: ./nginx
+    image: 176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-nginx:latest
     container_name: nginx
     ports:
       - "80:80"
@@ -95,9 +91,9 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin123
       - GF_AWS_DEFAULT_REGION=ap-south-1
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
       - grafana_data:/var/lib/grafana
     networks:
       - app-network
@@ -106,7 +102,6 @@ services:
       - prometheus
 
 volumes:
-  mysql-data:
   grafana_data:
 
 networks:

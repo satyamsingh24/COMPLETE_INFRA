@@ -4,6 +4,7 @@ datasources:
   - name: CloudWatch
     type: cloudwatch
     access: proxy
+    uid: cloudwatch-main
     isDefault: true
     jsonData:
       authType: ec2_iam_role
@@ -14,7 +15,9 @@ datasources:
   - name: Prometheus
     type: prometheus
     access: proxy
+    uid: prometheus-main
     url: http://prometheus:9090
     isDefault: false
     version: 1
     editable: true
+    
