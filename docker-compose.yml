@@ -95,7 +95,6 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin123
       - GF_AWS_DEFAULT_REGION=ap-south-1
-      - GF_INSTALL_PLUGINS=grafana-cloudwatch-datasource
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
