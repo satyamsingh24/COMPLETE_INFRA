@@ -190,3 +190,56 @@ echo "=== Bootstrap Complete ==="
 echo "Jenkins : http://$PUBLIC_IP:8080"
 echo "Username: admin"
 echo "Password: admin123"
+
+# ============ Container Monitor Setup ============
+echo "=== Container Monitor Setup ==="
+
+# Cronie install karo
+dnf install -y cronie || true
+systemctl enable crond
+systemctl start crond
+
+# Monitor script create karo
+mkdir -p /opt/monitoring
+cat > /opt/monitoring/container-monitor.sh << 'SCRIPT'
+#!/bin/bash
+SNS_TOPIC_ARN="arn:aws:sns:ap-south-1:176583374037:complete-infra-alerts"
+AWS_REGION="ap-south-1"
+CONTAINERS=("backend" "mysql" "redis" "nginx" "grafana" "prometheus")
+
+for container in "${CONTAINERS[@]}"; do
+  STATUS=$(docker inspect --format='{{.State.Status}}' $container 2>/dev/null)
+  HEALTH=$(docker inspect --format='{{.State.Health.Status}}' $container 2>/dev/null)
+
+  if [ "$STATUS" != "running" ]; then
+    aws sns publish \
+      --topic-arn $SNS_TOPIC_ARN \
+      --subject "Container DOWN: $container" \
+      --message "Container '$container' is DOWN!
+Status: $STATUS
+Time: $(date)
+Instance: $(curl -s http://169.254.169.254/latest/meta-data/instance-id)" \
+      --region $AWS_REGION || true
+
+  elif [ "$HEALTH" = "unhealthy" ]; then
+    aws sns publish \
+      --topic-arn $SNS_TOPIC_ARN \
+      --subject "Container UNHEALTHY: $container" \
+      --message "Container '$container' is UNHEALTHY!
+Time: $(date)
+Instance: $(curl -s http://169.254.169.254/latest/meta-data/instance-id)" \
+      --region $AWS_REGION || true
+  fi
+done
+SCRIPT
+
+chmod +x /opt/monitoring/container-monitor.sh
+touch /var/log/container-monitor.log
+chmod 666 /var/log/container-monitor.log
+
+# Cron job setup
+tee /etc/cron.d/container-monitor << 'CRON'
+*/2 * * * * root /opt/monitoring/container-monitor.sh >> /var/log/container-monitor.log 2>&1
+CRON
+
+echo "=== Container Monitor Setup Complete ==="
