@@ -54,5 +54,5 @@ variable "github_repo_url" {
 variable "alert_email" {
   description = "Email for CloudWatch alerts"
   type        = string
-  default     = "your-email@gmail.com"
+  default     = "satyamsinghbhadoriya922@gmail.com"
 }

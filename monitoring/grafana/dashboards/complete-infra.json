@@ -1,0 +1,149 @@
+{
+  "title": "Complete Infra Dashboard",
+  "uid": "complete-infra-main",
+  "panels": [
+    {
+      "id": 1,
+      "title": "EC2 CPU Utilization",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [{
+        "datasource": {"type": "cloudwatch", "uid": "${DS_CLOUDWATCH}"},
+        "dimensions": {"InstanceId": "i-0c26d6e666af4aa02"},
+        "metricName": "CPUUtilization",
+        "namespace": "AWS/EC2",
+        "period": "60",
+        "refId": "A",
+        "region": "ap-south-1",
+        "statistics": ["Average"]
+      }]
+    },
+    {
+      "id": 2,
+      "title": "EC2 Network In/Out",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {
+          "datasource": {"type": "cloudwatch", "uid": "${DS_CLOUDWATCH}"},
+          "dimensions": {"InstanceId": "i-0c26d6e666af4aa02"},
+          "metricName": "NetworkIn",
+          "namespace": "AWS/EC2",
+          "period": "60",
+          "refId": "A",
+          "region": "ap-south-1",
+          "statistics": ["Average"]
+        },
+        {
+          "datasource": {"type": "cloudwatch", "uid": "${DS_CLOUDWATCH}"},
+          "dimensions": {"InstanceId": "i-0c26d6e666af4aa02"},
+          "metricName": "NetworkOut",
+          "namespace": "AWS/EC2",
+          "period": "60",
+          "refId": "B",
+          "region": "ap-south-1",
+          "statistics": ["Average"]
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "ALB Request Count",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [{
+        "datasource": {"type": "cloudwatch", "uid": "${DS_CLOUDWATCH}"},
+        "dimensions": {"LoadBalancer": "app/complete-infra-alb/2d7da2c3d18073ae"},
+        "metricName": "RequestCount",
+        "namespace": "AWS/ApplicationELB",
+        "period": "60",
+        "refId": "A",
+        "region": "ap-south-1",
+        "statistics": ["Sum"]
+      }]
+    },
+    {
+      "id": 4,
+      "title": "ALB 5XX Errors",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [{
+        "datasource": {"type": "cloudwatch", "uid": "${DS_CLOUDWATCH}"},
+        "dimensions": {"LoadBalancer": "app/complete-infra-alb/2d7da2c3d18073ae"},
+        "metricName": "HTTPCode_ELB_5XX_Count",
+        "namespace": "AWS/ApplicationELB",
+        "period": "60",
+        "refId": "A",
+        "region": "ap-south-1",
+        "statistics": ["Sum"]
+      }]
+    },
+    {
+      "id": 5,
+      "title": "ALB Response Time",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "targets": [{
+        "datasource": {"type": "cloudwatch", "uid": "${DS_CLOUDWATCH}"},
+        "dimensions": {"LoadBalancer": "app/complete-infra-alb/2d7da2c3d18073ae"},
+        "metricName": "TargetResponseTime",
+        "namespace": "AWS/ApplicationELB",
+        "period": "60",
+        "refId": "A",
+        "region": "ap-south-1",
+        "statistics": ["Average"]
+      }]
+    },
+    {
+      "id": 6,
+      "title": "Healthy Hosts",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 16},
+      "targets": [{
+        "datasource": {"type": "cloudwatch", "uid": "${DS_CLOUDWATCH}"},
+        "dimensions": {
+          "LoadBalancer": "app/complete-infra-alb/2d7da2c3d18073ae",
+          "TargetGroup": "targetgroup/complete-infra-nginx-tg/acd4ca79e29b43eb"
+        },
+        "metricName": "HealthyHostCount",
+        "namespace": "AWS/ApplicationELB",
+        "period": "60",
+        "refId": "A",
+        "region": "ap-south-1",
+        "statistics": ["Average"]
+      }]
+    },
+    {
+      "id": 7,
+      "title": "EC2 Disk Read/Write",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 16},
+      "targets": [
+        {
+          "datasource": {"type": "cloudwatch", "uid": "${DS_CLOUDWATCH}"},
+          "dimensions": {"InstanceId": "i-0c26d6e666af4aa02"},
+          "metricName": "DiskReadBytes",
+          "namespace": "AWS/EC2",
+          "period": "60",
+          "refId": "A",
+          "region": "ap-south-1",
+          "statistics": ["Average"]
+        },
+        {
+          "datasource": {"type": "cloudwatch", "uid": "${DS_CLOUDWATCH}"},
+          "dimensions": {"InstanceId": "i-0c26d6e666af4aa02"},
+          "metricName": "DiskWriteBytes",
+          "namespace": "AWS/EC2",
+          "period": "60",
+          "refId": "B",
+          "region": "ap-south-1",
+          "statistics": ["Average"]
+        }
+      ]
+    }
+  ],
+  "time": {"from": "now-3h", "to": "now"},
+  "refresh": "30s",
+  "schemaVersion": 36,
+  "__inputs": [{"name": "DS_CLOUDWATCH", "type": "datasource", "pluginId": "cloudwatch"}]
+}

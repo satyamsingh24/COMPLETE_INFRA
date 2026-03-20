@@ -73,8 +73,42 @@ services:
       - app-network
     restart: unless-stopped
 
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_AWS_DEFAULT_REGION=ap-south-1
+      - GF_INSTALL_PLUGINS=grafana-cloudwatch-datasource
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana_data:/var/lib/grafana
+    networks:
+      - app-network
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
 volumes:
   mysql-data:
+  grafana_data:
 
 networks:
   app-network:
