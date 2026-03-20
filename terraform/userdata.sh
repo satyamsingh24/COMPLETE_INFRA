@@ -128,7 +128,7 @@ java -jar /tmp/jenkins-cli.jar \
   install-plugin \
   git workflow-aggregator docker-workflow \
   amazon-ecr aws-credentials pipeline-aws \
-  github job-dsl configuration-as-code \
+  github job-dsl configuration-as-code pipeline-stage-view \
   -restart || echo "Plugin install failed"
 
 echo "Waiting for restart..."
