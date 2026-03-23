@@ -242,4 +242,4 @@ tee /etc/cron.d/container-monitor << 'CRON'
 */2 * * * * root /opt/monitoring/container-monitor.sh >> /var/log/container-monitor.log 2>&1
 CRON
 
-echo "=== Container Monitor Setup Complete ==="
+echo "=== Container Monitor Setup Complete ==="  #yees
