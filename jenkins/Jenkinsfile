@@ -97,43 +97,51 @@ pipeline {
         // NEW STAGE 1: Dynamic Grafana IP fetch karo (IP change hoti
         //              rehti hai — har build pe automatically detect)
         // ─────────────────────────────────────────────────────────────
-        stage('Detect Grafana URL') {
-            steps {
-                echo '🔍 Grafana ka current IP detect kar raha hun...'
-                script {
-                    // EC2 private IP fetch karo (same machine pe ho Grafana to)
-                    def privateIp = sh(
-                        script: "curl -s http://169.254.169.254/latest/meta-data/local-ipv4",
-                        returnStdout: true
-                    ).trim()
+       stage('Detect Grafana URL') {
+    steps {
+        echo '🔍 Detecting Grafana URL...'
+        script {
 
-                    // Grafana us private IP pe respond kar raha hai check karo
-                    def grafanaUp = sh(
-                        script: "curl -s -o /dev/null -w '%{http_code}' http://${privateIp}:${GRAFANA_PORT}/api/health",
-                        returnStdout: true
-                    ).trim()
+            // Public IP try karo (best for browser access)
+            def publicIp = sh(
+                script: "curl -s http://169.254.169.254/latest/meta-data/public-ipv4 || true",
+                returnStdout: true
+            ).trim()
 
-                    if (grafanaUp == '200') {
-                        env.GRAFANA_URL = "http://${privateIp}:${GRAFANA_PORT}"
-                        echo "✅ Grafana mila — URL: ${env.GRAFANA_URL}"
-                    } else {
-                        // Agar Grafana alag machine pe hai to localhost try karo
-                        def localhostCheck = sh(
-                            script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:${GRAFANA_PORT}/api/health",
-                            returnStdout: true
-                        ).trim()
+            // Private IP fallback
+            def privateIp = sh(
+                script: "curl -s http://169.254.169.254/latest/meta-data/local-ipv4 || true",
+                returnStdout: true
+            ).trim()
 
-                        if (localhostCheck == '200') {
-                            env.GRAFANA_URL = "http://localhost:${GRAFANA_PORT}"
-                            echo "✅ Grafana localhost pe mila — URL: ${env.GRAFANA_URL}"
-                        } else {
-                            error "❌ Grafana nahi mila! Port ${GRAFANA_PORT} pe koi response nahi."
-                        }
-                    }
-                }
+            // Default localhost
+            def url = "http://localhost:${GRAFANA_PORT}"
+
+            if (publicIp) {
+                url = "http://${publicIp}:${GRAFANA_PORT}"
+                echo "🌍 Using Public IP: ${url}"
+            } else if (privateIp) {
+                url = "http://${privateIp}:${GRAFANA_PORT}"
+                echo "🏠 Using Private IP: ${url}"
+            } else {
+                echo "⚠️ IP fetch failed, using localhost"
+            }
+
+            // Health check
+            def status = sh(
+                script: "curl -s -o /dev/null -w '%{http_code}' ${url}/api/health",
+                returnStdout: true
+            ).trim()
+
+            if (status == '200') {
+                env.GRAFANA_URL = url
+                echo "✅ Grafana Ready at: ${env.GRAFANA_URL}"
+            } else {
+                error "❌ Grafana not reachable at ${url}"
             }
         }
-
+    }
+}
         // ─────────────────────────────────────────────────────────────
         // NEW STAGE 2: CloudWatch DataSource setup (metrics + logs)
         // ─────────────────────────────────────────────────────────────
