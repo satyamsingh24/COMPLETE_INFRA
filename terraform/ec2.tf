@@ -94,6 +94,18 @@ resource "aws_iam_instance_profile" "ec2_profile" {
   role = aws_iam_role.ec2_role.name
 }
 
+# CloudWatch metrics
+resource "aws_iam_role_policy_attachment" "cloudwatch_read" {
+  role       = aws_iam_role.ec2_role.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess"
+}
+
+# CloudWatch logs
+resource "aws_iam_role_policy_attachment" "cloudwatch_logs_read" {
+  role       = aws_iam_role.ec2_role.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
+}
+
 # EC2 Instance
 resource "aws_instance" "jenkins" {
   ami                    = data.aws_ami.amazon_linux.id

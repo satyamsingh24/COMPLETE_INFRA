@@ -8,6 +8,14 @@ pipeline {
         ECR_NGINX   = '176583374037.dkr.ecr.ap-south-1.amazonaws.com/complete-infra-app-nginx'
         IMAGE_TAG      = "${BUILD_NUMBER}"
         APP_DIR        = '/opt/app/COMPLETE_INFRA'
+
+        // ✅ Grafana port fix — IP runtime pe fetch hogi automatically
+        GRAFANA_PORT   = '3000'
+
+        // ✅ CloudWatch Log Groups — apne actual log group names yahan daalo
+        LOG_GROUP_BACKEND = '/complete-infra/backend'
+        LOG_GROUP_NGINX   = '/complete-infra/nginx'
+        LOG_GROUP_SYSTEM  = '/complete-infra/system'
     }
 
     stages {
@@ -60,7 +68,6 @@ pipeline {
                 sh """
                     cd ${APP_DIR}
 
-                    # Git reset - no diverge issues
                     git fetch origin main
                     git reset --hard origin/main
 
@@ -85,14 +92,149 @@ pipeline {
                 """
             }
         }
+
+        // ─────────────────────────────────────────────────────────────
+        // NEW STAGE 1: Dynamic Grafana IP fetch karo (IP change hoti
+        //              rehti hai — har build pe automatically detect)
+        // ─────────────────────────────────────────────────────────────
+        stage('Detect Grafana URL') {
+            steps {
+                echo '🔍 Grafana ka current IP detect kar raha hun...'
+                script {
+                    // EC2 private IP fetch karo (same machine pe ho Grafana to)
+                    def privateIp = sh(
+                        script: "curl -s http://169.254.169.254/latest/meta-data/local-ipv4",
+                        returnStdout: true
+                    ).trim()
+
+                    // Grafana us private IP pe respond kar raha hai check karo
+                    def grafanaUp = sh(
+                        script: "curl -s -o /dev/null -w '%{http_code}' http://${privateIp}:${GRAFANA_PORT}/api/health",
+                        returnStdout: true
+                    ).trim()
+
+                    if (grafanaUp == '200') {
+                        env.GRAFANA_URL = "http://${privateIp}:${GRAFANA_PORT}"
+                        echo "✅ Grafana mila — URL: ${env.GRAFANA_URL}"
+                    } else {
+                        // Agar Grafana alag machine pe hai to localhost try karo
+                        def localhostCheck = sh(
+                            script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:${GRAFANA_PORT}/api/health",
+                            returnStdout: true
+                        ).trim()
+
+                        if (localhostCheck == '200') {
+                            env.GRAFANA_URL = "http://localhost:${GRAFANA_PORT}"
+                            echo "✅ Grafana localhost pe mila — URL: ${env.GRAFANA_URL}"
+                        } else {
+                            error "❌ Grafana nahi mila! Port ${GRAFANA_PORT} pe koi response nahi."
+                        }
+                    }
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // NEW STAGE 2: CloudWatch DataSource setup (metrics + logs)
+        // ─────────────────────────────────────────────────────────────
+        stage('Setup Grafana CloudWatch DataSource') {
+            steps {
+                echo '📡 Grafana mein CloudWatch DataSource configure kar raha hun...'
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'GRAFANA_CREDS',
+                        usernameVariable: 'GRAFANA_USER',
+                        passwordVariable: 'GRAFANA_PASS'
+                    )
+                ]) {
+                    sh '''
+                        DS_EXISTS=$(curl -s -o /dev/null -w "%{http_code}" \
+                            -u "${GRAFANA_USER}:${GRAFANA_PASS}" \
+                            "${GRAFANA_URL}/api/datasources/name/CloudWatch")
+
+                        if [ "$DS_EXISTS" = "200" ]; then
+                            echo "✅ CloudWatch DataSource already exists — skip"
+                        else
+                            echo "➕ CloudWatch DataSource create kar raha hun..."
+                            RESULT=$(curl -s -X POST \
+                                -H "Content-Type: application/json" \
+                                -u "${GRAFANA_USER}:${GRAFANA_PASS}" \
+                                "${GRAFANA_URL}/api/datasources" \
+                                -d '{
+                                    "name": "CloudWatch",
+                                    "type": "cloudwatch",
+                                    "access": "proxy",
+                                    "isDefault": true,
+                                    "jsonData": {
+                                        "authType": "default",
+                                        "defaultRegion": "ap-south-1",
+                                        "logsTimeout": "30m"
+                                    }
+                                }')
+                            echo "Response: $RESULT"
+                            echo "✅ CloudWatch DataSource (Metrics + Logs) created!"
+                        fi
+                    '''
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // NEW STAGE 4: Dashboard import/update
+        // ─────────────────────────────────────────────────────────────
+        stage('Import Grafana Dashboard') {
+            steps {
+                echo '📊 Grafana mein Dashboard import kar raha hun...'
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'GRAFANA_CREDS',
+                        usernameVariable: 'GRAFANA_USER',
+                        passwordVariable: 'GRAFANA_PASS'
+                    )
+                ]) {
+                    sh '''
+                        DASHBOARD_FILE="complete-infra-dashboard.json"
+
+                        if [ ! -f "$DASHBOARD_FILE" ]; then
+                            echo "❌ Dashboard JSON file nahi mili: $DASHBOARD_FILE"
+                            echo "   Repo root mein rakho: complete-infra-dashboard.json"
+                            exit 1
+                        fi
+
+                        echo "📤 Dashboard import ho raha hai..."
+                        RESPONSE=$(curl -s -X POST \
+                            -H "Content-Type: application/json" \
+                            -u "${GRAFANA_USER}:${GRAFANA_PASS}" \
+                            "${GRAFANA_URL}/api/dashboards/import" \
+                            -d @"${DASHBOARD_FILE}")
+
+                        echo "Grafana Response: $RESPONSE"
+
+                        # Status check
+                        STATUS=$(echo $RESPONSE | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+                        DASHBOARD_URL=$(echo $RESPONSE | grep -o '"url":"[^"]*"' | cut -d'"' -f4)
+
+                        if [ "$STATUS" = "success" ] || [ "$STATUS" = "imported" ]; then
+                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                            echo "📊 GRAFANA DASHBOARD READY!"
+                            echo "🔗 URL: ${GRAFANA_URL}${DASHBOARD_URL}"
+                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                        else
+                            echo "⚠️  Response check karo upar — manually verify:"
+                            echo "   ${GRAFANA_URL}/dashboards"
+                        fi
+                    '''
+                }
+            }
+        }
     }
 
     post {
         success {
-            echo '🎉 Pipeline SUCCESS!'  //pipeline working 
+            echo '🎉 Pipeline SUCCESS! Grafana Dashboard pe CloudWatch data ab dikhega.'
         }
         failure {
-            echo '❌ Pipeline FAILED!'
+            echo '❌ Pipeline FAILED! Logs check karo.'
         }
     }
 }

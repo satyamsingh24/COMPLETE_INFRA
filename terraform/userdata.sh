@@ -185,6 +185,30 @@ java -jar /tmp/jenkins-cli.jar \
 
 echo "✅ Build triggered!"
 
+# ============ Grafana Credentials - Jenkins mein auto add ============
+echo "=== Grafana Credentials Setup ==="
+
+# Grafana credential XML - username/password type
+cat > /tmp/grafana-creds.xml << 'GRAFANACREDS'
+<com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl>
+  <scope>GLOBAL</scope>
+  <id>GRAFANA_CREDS</id>
+  <description>Grafana Login Credentials</description>
+  <username>admin</username>
+  <password>admin123</password>
+</com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl>
+GRAFANACREDS
+
+# Jenkins mein credential create karo
+java -jar /tmp/jenkins-cli.jar \
+  -s http://localhost:8080 \
+  -auth admin:admin123 \
+  create-credentials-by-xml system::system::jenkins "(global)" \
+  < /tmp/grafana-creds.xml && echo "✅ GRAFANA_CREDS created!" || echo "⚠️ GRAFANA_CREDS already exists — skip"
+
+echo "=== Grafana Credentials Setup Complete ==="
+# ====================================================================
+
 PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
 echo "=== Bootstrap Complete ==="
 echo "Jenkins : http://$PUBLIC_IP:8080"
