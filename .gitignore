@@ -16,3 +16,4 @@ backend/target/
 *.class
 *.jar
 *.jar.original
+.env
