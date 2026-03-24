@@ -297,7 +297,7 @@ resource "grafana_dashboard" "aws_dashboard" {
           expression  = "fields @timestamp, @message | sort @timestamp desc | limit 200"
           id          = "backend_logs"
           logGroups   = [{
-            arn  = "arn:aws:logs:${var.aws_region}:176583374037:log-group:/${var.project_name}/backend:*"
+            arn  = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/${var.project_name}/backend:*"
             name = "/${var.project_name}/backend"
           }]
           queryMode   = "Logs"
@@ -327,7 +327,7 @@ resource "grafana_dashboard" "aws_dashboard" {
           expression  = "fields @timestamp, @message | sort @timestamp desc | limit 200"
           id          = "nginx_logs"
           logGroups   = [{
-            arn  = "arn:aws:logs:${var.aws_region}:176583374037:log-group:/${var.project_name}/nginx:*"
+            arn  = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/${var.project_name}/nginx:*"
             name = "/${var.project_name}/nginx"
           }]
           queryMode   = "Logs"
@@ -357,7 +357,7 @@ resource "grafana_dashboard" "aws_dashboard" {
           expression  = "fields @timestamp, @message | sort @timestamp desc | limit 200"
           id          = "system_logs"
           logGroups   = [{
-            arn  = "arn:aws:logs:${var.aws_region}:176583374037:log-group:/${var.project_name}/system:*"
+            arn  = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/${var.project_name}/system:*"
             name = "/${var.project_name}/system"
           }]
           queryMode   = "Logs"
@@ -376,4 +376,3 @@ resource "grafana_dashboard" "aws_dashboard" {
     ] # panels end
   })
 }
-
