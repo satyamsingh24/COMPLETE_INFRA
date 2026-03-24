@@ -1,6 +1,6 @@
 {
   "title": "Complete Infra Dashboard",
-  "uid": "d66813ea-a41e-4171-9506-d2aade96b303",
+  "uid": "complete-infra-main",
   "templating": {
     "list": [
       {
@@ -82,7 +82,14 @@
         "refId": "A",
         "region": "$region",
         "statistics": ["Average"]
-      }]
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2}
+        }
+      }
     },
     {
       "id": 2,
@@ -110,7 +117,14 @@
           "region": "$region",
           "statistics": ["Average"]
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2}
+        }
+      }
     },
     {
       "id": 3,
@@ -126,7 +140,14 @@
         "refId": "A",
         "region": "$region",
         "statistics": ["Sum"]
-      }]
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2}
+        }
+      }
     },
     {
       "id": 4,
@@ -142,7 +163,14 @@
         "refId": "A",
         "region": "$region",
         "statistics": ["Sum"]
-      }]
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "fixed", "fixedColor": "red"},
+          "custom": {"lineWidth": 2}
+        }
+      }
     },
     {
       "id": 5,
@@ -158,7 +186,14 @@
         "refId": "A",
         "region": "$region",
         "statistics": ["Average"]
-      }]
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2}
+        }
+      }
     },
     {
       "id": 6,
@@ -177,7 +212,19 @@
         "refId": "A",
         "region": "$region",
         "statistics": ["Average"]
-      }]
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": 0},
+              {"color": "green", "value": 1}
+            ]
+          }
+        }
+      }
     },
     {
       "id": 7,
@@ -205,7 +252,14 @@
           "region": "$region",
           "statistics": ["Average"]
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2}
+        }
+      }
     }
   ],
   "time": {"from": "now-3h", "to": "now"},

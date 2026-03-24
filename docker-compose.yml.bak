@@ -99,7 +99,6 @@ services:
     - "host.docker.internal:host-gateway"
     volumes:
     - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
-    - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
     - grafana_data:/var/lib/grafana
     networks:
     - app-network
